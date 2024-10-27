@@ -14,7 +14,7 @@ const lineConfig = {
 };
 const client = new line.Client(lineConfig);
 
-// Processes
+// Process
 app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
     try {
         const events = req.body.events;
