@@ -33,7 +33,7 @@ const handleEvent = async (event) => {
                 const url = 'https://slipsplus.com/api/verify';
                 const data = {
                     qrcode_text: qrText,
-                    key_api: '',
+                    key_api: env.SECRET_KEY_API,
                     ip: null,
                 };
 
