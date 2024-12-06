@@ -5,8 +5,8 @@ const dotenv = require('dotenv');
 const { createCanvas, loadImage } = require('canvas');
 const jsqr = require('jsqr');
 
-// Variables
 const env = dotenv.config().parsed;
+console.log(env.ACCESS_TOKEN)
 const app = express();
 const lineConfig = {
     channelAccessToken: env.ACCESS_TOKEN,
@@ -14,7 +14,7 @@ const lineConfig = {
 };
 const client = new line.Client(lineConfig);
 
-// Process
+// Processes
 app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
     try {
         const events = req.body.events;
@@ -25,383 +25,190 @@ app.post('/webhook', line.middleware(lineConfig), async (req, res) => {
     }
 });
 
+const generatePaymentSlip = ({ 
+    amount, 
+    timestamp, 
+    senderCode, 
+    senderName, 
+    receiverCode, 
+    receiverName,
+    CheckingText,
+    CheckingTextColor,
+    Textstatus,
+    checkIconUrl = "https://static.vecteezy.com/system/resources/previews/009/591/411/non_2x/check-mark-icon-free-png.png"
+  }) => {
+    return {
+      type: "flex",
+      altText: "Payment Confirmation Slip",
+      contents: {
+        type: "bubble",
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "md",
+          contents: [
+            {
+              type: "box",
+              layout: "baseline",
+              contents: [
+                {
+                  type: "icon",
+                  url: checkIconUrl,
+                  size: "15px",
+                  aspectRatio: "1:1"
+                },
+                {
+                  type: "text",
+                  text: CheckingText,
+                  color: CheckingTextColor,
+                  size: "md",
+                  weight: "bold",
+                  margin: "sm"
+                }
+              ]
+            },
+            {
+              type: "box",
+              layout: "horizontal",
+              contents: [
+                {
+                  type: "text",
+                  text: `฿ ${amount.toString()}`,
+                  size: "xl",
+                  weight: "bold"
+                }
+              ]
+            },
+            {
+              type: "text",
+              text: `${Textstatus} เวลา: ${timestamp}`,
+              size: "sm",
+              color: "#8594A3"
+            },
+            {
+              type: "separator",
+              margin: "lg"
+            },
+            {
+              type: "box",
+              layout: "vertical",
+              spacing: "sm",
+              margin: "lg",
+              contents: [
+                {
+                  type: "box",
+                  layout: "horizontal",
+                  contents: [
+                    {
+                      type: "text",
+                      text: "ชื่อผู้โอน",
+                      size: "sm",
+                      color: "#8594A3"
+                    },
+                    {
+                      type: "text",
+                      text: senderCode,
+                      size: "sm",
+                      margin: "md"
+                    },
+                    {
+                      type: "text",
+                      text: senderName,
+                      size: "sm"
+                    }
+                  ]
+                },
+                {
+                  type: "box",
+                  layout: "horizontal",
+                  contents: [
+                    {
+                      type: "text",
+                      text: "ชื่อผู้รับ",
+                      size: "sm",
+                      color: "#8594A3"
+                    },
+                    {
+                      type: "text",
+                      text: receiverCode,
+                      size: "sm",
+                      margin: "md"
+                    },
+                    {
+                      type: "text",
+                      text: receiverName,
+                      size: "sm"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    };
+  };
+
 const handleEvent = async (event) => {
     if (event.type === 'message' && event.message.type === 'image') {
+        console.log(event.replyToken);
         try {
             const qrText = await handleImageMessage(event);
             if (qrText) {
-                const url = 'https://slipsplus.com/api/verify';
+                const url = "https://api.slipok.com/api/line/apikey/33282";
+                const apiKey = "SLIPOKZ5I20FE";
+                const log = false;
+
                 const data = {
-                    qrcode_text: qrText,
-                    key_api: env.SECRET_KEY_API,
-                    ip: null,
+                    data: qrText,
+                    log: log
+                };
+                
+                const headers = {
+                    "Content-Type": "application/json",
+                    "x-authorization": apiKey
                 };
 
                 try {
-                    const response = await axios.post(url, data);
-                    if (response.status === 200) {
-                        const moneyformatted = parseFloat(response.data["amount"]);
-                        const formattedMoney = moneyformatted.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: headers,
+                        body: JSON.stringify(data),
+                    });
+
+                    const responseData = await response.json();
+                    receivercode = responseData.data.receiver.proxy.value
+                    sendercode = responseData.data.sender.account.value
+                    if (responseData.success) {
+                        Slip = generatePaymentSlip({
+                            amount: responseData.data.amount,
+                            timestamp: `${responseData.data.transTime}`,
+                            senderCode: `${sendercode.replace(/.*?(\w{1}\d{4}-\w)/, '$1')}`,
+                            senderName: `${responseData.data.sender.name}`,
+                            receiverCode: `${receivercode.replace(/.*?(\w{1}\d{4}-\w)/, '$1')}`,
+                            receiverName: `${responseData.data.receiver.displayName}`,
+                            CheckingText: "สลิปถูกต้อง",
+                            Textstatus: "รับเงินเรียบร้อย",
+                            CheckingTextColor: "#27AE60"
                         });
-                        if (response.data["request_same"] == 0) {
-                            const flexMessage = {
-                                type: 'flex',
-                                altText: 'ตรวจสอบสลิป',
-                                contents: {
-                                type: "bubble",
-                                body: {
-                                    type: "box",
-                                    layout: "vertical",
-                                    contents: [
-                                    {
-                                        type: "text",
-                                        text: "RECEIPT",
-                                        weight: "bold",
-                                        color: "#1DB446",
-                                        size: "sm"
-                                    },
-                                    {
-                                        type: "text",
-                                        text: `${response.data.massage_th}`,
-                                        weight: "bold",
-                                        size: "xxl",
-                                        margin: "md"
-                                    },
-                                    {
-                                        type: "separator",
-                                        margin: "xxl"
-                                    },
-                                    {
-                                        type: "box",
-                                        layout: "vertical",
-                                        margin: "xxl",
-                                        spacing: "sm",
-                                        contents: [
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "ยอดเงิน",
-                                                size: "sm",
-                                                color: "#555555",
-                                                flex: 0
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${formattedMoney} บาท`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        },
-                                        {
-                                            type: "separator",
-                                            margin: "xxl"
-                                        },
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "ชื่อผู้รับ",
-                                                size: "sm",
-                                                color: "#555555"
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${response.data.receiver.name}`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        },
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "เลขที่บัญชี",
-                                                size: "sm",
-                                                color: "#555555"
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${response.data.receiver.acc_no}`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        },
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "ธนาคาร",
-                                                size: "sm",
-                                                color: "#555555"
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${response.data.receiver.bank_name}`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        }
-                                        ]
-                                    },
-                                    {
-                                        type: "separator",
-                                        margin: "xxl"
-                                    },
-                                    {
-                                        type: "box",
-                                        layout: "horizontal",
-                                        margin: "md",
-                                        contents: [
-                                        {
-                                            type: "text",
-                                            text: "PAYMENT ID",
-                                            size: "xs",
-                                            color: "#aaaaaa",
-                                            flex: 0
-                                        },
-                                        {
-                                            type: "text",
-                                            text: `#${response.data.transactionId}`,
-                                            color: "#aaaaaa",
-                                            size: "xs",
-                                            align: "end"
-                                        }
-                                        ]
-                                    },
-                                    {
-                                        type: "box",
-                                        layout: "horizontal",
-                                        margin: "md",
-                                        contents: [
-                                        {
-                                            type: "text",
-                                            text: "เวลา",
-                                            size: "xs",
-                                            color: "#aaaaaa",
-                                            flex: 0
-                                        },
-                                        {
-                                            type: "text",
-                                            text: `${response.data.slip_time}`,
-                                            color: "#aaaaaa",
-                                            size: "xs",
-                                            align: "end"
-                                        }
-                                        ]
-                                    }
-                                    ]
-                                },
-                                "styles": {
-                                    "footer": {
-                                    "separator": true
-                                    }
-                                }},
-                            };
-                            await client.replyMessage(event.replyToken, flexMessage);
-                        } else {
-                            const flexMessage = {
-                                type: 'flex',
-                                altText: 'This is a flex message',
-                                contents: {
-                                type: "bubble",
-                                body: {
-                                    type: "box",
-                                    layout: "vertical",
-                                    contents: [
-                                    {
-                                        type: "text",
-                                        text: "RECEIPT",
-                                        weight: "bold",
-                                        color: "#1DB446",
-                                        size: "sm"
-                                    },
-                                    {
-                                        type: "text",
-                                        text: `${response.data.massage_th}`,
-                                        weight: "bold",
-                                        size: "xxl",
-                                        margin: "md"
-                                    },
-                                    {
-                                        type: "separator",
-                                        margin: "xxl"
-                                    },
-                                    {
-                                        type: "box",
-                                        layout: "vertical",
-                                        margin: "xxl",
-                                        spacing: "sm",
-                                        contents: [
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "ยอดเงิน",
-                                                size: "sm",
-                                                color: "#555555",
-                                                flex: 0
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${formattedMoney} บาท`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        },
-                                        {
-                                            type: "separator",
-                                            margin: "xxl"
-                                        },
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "ชื่อผู้รับ",
-                                                size: "sm",
-                                                color: "#555555"
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${response.data.receiver.name}`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        },
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "เลขที่บัญชี",
-                                                size: "sm",
-                                                color: "#555555"
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${response.data.receiver.acc_no}`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        },
-                                        {
-                                            type: "box",
-                                            layout: "horizontal",
-                                            contents: [
-                                            {
-                                                type: "text",
-                                                text: "ธนาคาร",
-                                                size: "sm",
-                                                color: "#555555"
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `${response.data.receiver.bank_name}`,
-                                                size: "sm",
-                                                color: "#111111",
-                                                align: "end"
-                                            }
-                                            ]
-                                        }
-                                        ]
-                                    },
-                                    {
-                                        type: "separator",
-                                        margin: "xxl"
-                                    },
-                                    {
-                                        type: "box",
-                                        layout: "horizontal",
-                                        margin: "md",
-                                        contents: [
-                                        {
-                                            type: "text",
-                                            text: "PAYMENT ID",
-                                            size: "xs",
-                                            color: "#aaaaaa",
-                                            flex: 0
-                                        },
-                                        {
-                                            type: "text",
-                                            text: `#${response.data.transactionId}`,
-                                            color: "#aaaaaa",
-                                            size: "xs",
-                                            align: "end"
-                                        }
-                                        ]
-                                    },
-                                    {
-                                        type: "box",
-                                        layout: "horizontal",
-                                        margin: "md",
-                                        contents: [
-                                        {
-                                            type: "text",
-                                            text: "เวลา",
-                                            size: "xs",
-                                            color: "#aaaaaa",
-                                            flex: 0
-                                        },
-                                        {
-                                            type: "text",
-                                            text: `${response.data.slip_time}`,
-                                            color: "#aaaaaa",
-                                            size: "xs",
-                                            align: "end"
-                                        }
-                                        ]
-                                    }
-                                    ]
-                                },
-                                "styles": {
-                                    "footer": {
-                                    "separator": true
-                                    }
-                                }},
-                            };
-                            await client.replyMessage(event.replyToken, flexMessage);
-                        }
+                    } else {
+                        Slip = generatePaymentSlip({
+                            amount: responseData.data.amount,
+                            timestamp: `${responseData.data.transTime}`,
+                            senderCode: `${sendercode.replace(/.*?(\w{1}\d{4}-\w)/, '$1')}`,
+                            senderName: `${responseData.data.sender.name}`,
+                            receiverCode: `${receivercode.replace(/.*?(\w{1}\d{4}-\w)/, '$1')}`,
+                            receiverName: `${responseData.data.receiver.displayName}`,
+                            CheckingText: "สลิปไม่ถูกต้อง",
+                            Textstatus: "",
+                            CheckingTextColor: "#FF3A0F",
+                            checkIconUrl: "https://image.similarpng.com/very-thumbnail/2021/06/Cross-mark-icon-in-red-color-on-transparent-background-PNG.png"
+                        });
                     }
+                    await client.replyMessage(event.replyToken, Slip);
+
                 } catch (error) {
                     console.error('Error making POST request:', error.message);
-                    if (error.response) {
-                        console.error('Response data:', error.response.data);
-                        console.error('Response status:', error.response.status);
-                        console.error('Response headers:', error.response.headers);
-                    } else if (error.request) {
-                        console.error('No response received:', error.request);
-                    } else {
-                        console.error('Error in request setup:', error.message);
-                    }
                 }
             } else {
                 console.log('No QR code found in the image.');
@@ -453,7 +260,6 @@ async function handleImageMessage(event) {
         }
     });
 }
-
 
 app.listen(4000, () => {
     console.log('listening on ' + 4000);
